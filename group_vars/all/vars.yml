@@ -1,0 +1,4 @@
+app_dir: "/opt/wordpress_app"
+db_name: "wordpress_db"
+db_user: "wp_user"
+domain_name: 192.168.1.53

@@ -1,0 +1,14 @@
+---
+# Prueba unitaria 3: Salud de la base de datos MySQL
+- name: Ejecutar comprobación mysqladmin pong dentro del contenedor DB
+  ansible.builtin.command:
+    cmd: "docker exec wp_db mysqladmin ping -h localhost -u root -p{{ db_root_password }}"
+  register: db_ping
+  changed_when: false
+
+- name: Validar que la respuesta de MySQL sea 'mysqld is alive'
+  ansible.builtin.assert:
+    that:
+      - "'mysqld is alive' in db_ping.stdout"
+    fail_msg: "La base de datos MySQL no está respondiendo correctamente"
+    success_msg: "La base de datos MySQL está respondiendo correctamente"
