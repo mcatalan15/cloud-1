@@ -1,0 +1,13 @@
+---
+# Orquestador principal que ejecuta todas las pruebas unitarias en secuencia
+- name: Prueba unitaria - Estado de los contenedores Docker
+  ansible.builtin.import_tasks: test_docker.yml
+  tags: ['test', 'test_docker']
+
+- name: Prueba unitaria - Endpoints HTTP/HTTPS
+  ansible.builtin.import_tasks: test_http.yml
+  tags: ['test', 'test_http']
+
+- name: Prueba unitaria -  Salud de la base de datos MySQL
+  ansible.builtin.import_tasks: test_db.yml
+  tags: ['test', 'test_db']

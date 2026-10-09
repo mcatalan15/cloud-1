@@ -1,0 +1,33 @@
+---
+#1. Crear el directorio de la aplicación en el servidor remoto
+- name: Crear directorio de trabajo para la aplicación
+  ansible.builtin.file:
+    path: "{{ app_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+#2 Copiar la plantilla de configuración de Nginx
+- name: Generar archivo de configuración de Nginx desde la plantilla 
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: "{{ app_dir }}/nginx.conf"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+
+#3. Copiar la plantilla de docker-compose.yml
+- name: Generar archivo docker-compose.yml desde la plantilla
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ app_dir }}/docker-compose.yml"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+
+#4. Desplegar los contenedores con Docker Compose
+- name: Desplegar la pila de servicios en Docker Compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ app_dir }}"
+    state: present
