@@ -1,190 +1,194 @@
-# Despliegue Automatizado de WordPress, phpMyAdmin y MySQL con Ansible y Docker
+# Cloud-1: Infraestructura como Código y Gestión de Configuración (42 School)
 
-Este proyecto contiene la automatización completa en **Ansible** para el aprovisionamiento, configuración, despliegue y verificación de una infraestructura web basada en **WordPress**, **phpMyAdmin**, **MySQL 8.0** y un proxy inverso **Nginx**, todo ejecutado en contenedores **Docker** aislados sobre servidores Ubuntu 22.04 LTS.
+Proyecto de automatización de infraestructura en la nube (AWS) y aprovisionamiento de servicios de alta disponibilidad mediante **Terraform**, **Ansible** y **Docker**, orquestado bajo estándares **GNU Make**.
 
 ---
 
-## 📐 Arquitectura del Sistema
+## 📋 Tabla de Contenidos
 
-La solución está diseñada siguiendo el principio de **1 proceso = 1 contenedor**, utilizando una red privada interna de Docker (`internal_net`) para aislar los componentes sensibles del exterior.
+1. [Descripción General](#-descripción-general)
+2. [Arquitectura del Sistema](#-arquitectura-del-sistema)
+3. [Decisiones de Diseño](#-decisiones-de-diseño)
+4. [Estructura del Repositorio](#-estructura-del-repositorio)
+5. [Requisitos Previos](#-requisitos-previos)
+6. [Seguridad y Gestión de Secretos](#-seguridad-y-gestión-de-secretos)
+7. [Ciclo de Vida y Despliegue](#-ciclo-de-vida-y-despliegue)
+8. [Pruebas y Verificación](#-pruebas-y-verificación)
+9. [Control de Costes (Free Tier)](#-control-de-costes-free-tier)
+
+---
+
+## 🎯 Descripción General
+
+El objetivo de **Cloud-1** es trasladar y evolucionar los conceptos de virtualización y contenedores (*Inception*) a un entorno de nube pública (**Amazon Web Services**).
+
+La arquitectura implementa una separación estricta de responsabilidades:
+* **Terraform**: Aprovisiona la topología de red aislada (VPC, Subred Pública, Internet Gateway, Tabla de Rutas), el perímetro de seguridad perimetral (Security Group) y el cómputo (Instancia EC2 con Ubuntu 22.04 LTS y par de claves SSH).
+* **Ansible**: Aprovisiona el sistema operativo, endurece la seguridad base, instala el motor Docker oficial y orquesta el stack de WordPress mediante contenedores aislados.
+* **GNU Make**: Ejerce de interfaz unificada para validar, desplegar, auditar y destruir la infraestructura de forma idempotente y reproducible.
+
+---
+
+## 🏗️ Arquitectura del Sistema
 
 ```text
-                  +-----------------------------------+
-                  |        Cliente / Navegador        |
-                  +-----------------------------------+
-                                    |
-                                HTTP (80)
-                                    v
-+-------------------------------------------------------------------+
-| Servidor Host (Ubuntu 22.04 LTS) - UFW: Puertos 22, 80, 443       |
-|                                                                   |
-|  +-------------------------------------------------------------+  |
-|  | Contenedor 1: wp_nginx (Proxy Inverso Nginx)               |  |
-|  +-------------------------------------------------------------+  |
-|                 /                               \                 |
-|       Ruta: /  /                                 \ Ruta: /phpmyadmin/
-|               v                                   v               |
-|  +-------------------------+         +-------------------------+  |
-|  | Contenedor 2: wp_app    |         | Contenedor 4:           |  |
-|  | (WordPress PHP-FPM)     |         | wp_phpmyadmin           |  |
-|  +-------------------------+         +-------------------------+  |
-|               \                                   /               |
-|                \   Red Interna Docker (internal_net) /                |
-|                 v                               v                 |
-|  +-------------------------------------------------------------+  |
-|  | Contenedor 3: wp_db (MySQL 8.0 - Sin puerto público expuesto)|  |
-|  +-------------------------------------------------------------+  |
-|                                                                   |
-+-------------------------------------------------------------------+
+INTERNET
+   │
+   ▼
+[ Internet Gateway (IGW) ]
+   │
+   ▼
+[ Tabla de Rutas: 0.0.0.0/0 -> IGW ]
+   │
+   ▼
+[ AWS Virtual Private Cloud (VPC: 10.0.0.0/16) ]
+   └── [ Subred Pública (10.0.1.0/24) - us-east-1a ]
+         │
+         ├── [ Security Group ]
+         │     ├── Ingress: 22 (SSH), 80 (HTTP), 443 (HTTPS)
+         │     └── Egress:  All (0.0.0.0/0)
+         │
+         └── [ Instancia EC2 (t2.micro / Ubuntu 22.04 LTS) ]
+               │
+               └── [ Docker Engine ]
+                     ├── Contenedor 1: Nginx (Reverse Proxy SSL / TLS)
+                     ├── Contenedor 2: WordPress (PHP-FPM)
+                     ├── Contenedor 3: MariaDB (Base de datos interna)
+                     └── Contenedor 4: phpMyAdmin (Gestión web)
 ```
 
 ---
 
-## 📁 Estructura del Proyecto Ansible
+## 💡 Decisiones de Diseño
 
-El código está estructurado en **roles modulares** de Ansible para maximizar la mantenibilidad, reutilización e idempotencia:
+### 1. Desacoplamiento de Herramientas (Opción B)
+En lugar de forzar a Terraform a invocar Ansible mediante *provisioners* frágiles (`local-exec` o `remote-exec`), se ha implementado un desacoplamiento limpio:
+* Terraform renderiza dinámicamente la plantilla `terraform/templates/hosts.tpl` mediante la función nativa `templatefile()`.
+* El recurso `local_file` genera el inventario `ansible/inventory/hosts.yml` con la IP pública asignada por AWS.
+* Ansible se ejecuta de forma independiente sobre dicho inventario, garantizando trazabilidad y facilidad de depuración.
+
+### 2. Inmutabilidad y Búsqueda Dinámica de AMI
+No se queman identificadores estáticos de imágenes (*hardcoding*). El bloque `data "aws_ami" "ubuntu"` consulta la API de AWS para obtener siempre la versión LTS más reciente publicada por Canonical (`owner: 099720109477`).
+
+### 3. Aislamiento de Base de Datos
+Siguiendo los principios de seguridad de la práctica:
+* El puerto **3306 (MySQL/MariaDB)** **NO** está expuesto en el Security Group de AWS.
+* La comunicación entre WordPress y MariaDB se realiza exclusivamente a través de una red interna de puente (*bridge network*) de Docker.
+
+---
+
+## 📂 Estructura del Repositorio
 
 ```text
-cloud_1/
-├── group_vars/
-│   └── all/
-│       ├── vars.yml          # Variables generales de configuración (rutas, dominio, BD)
-│       └── vault.yml         # Secretos cifrados con Ansible Vault (contraseñas BD)
-├── inventory.ini             # Inventario de servidores objetivo
-├── site.yml                  # Playbook principal de orquestación
-└── roles/
-    ├── common/               # Preparación del SO base y firewall UFW
-    │   └── tasks/
-    │       └── main.yml
-    ├── docker/               # Instalación del motor Docker y complemento Compose v2
-    │   └── tasks/
-    │       └── main.yml
-    ├── app/                  # Plantillas Jinja2, despliegue Docker Compose y Handlers
-    │   ├── handlers/
-    │   │   └── main.yml      # Handler para reinicio automático de Nginx
-    │   ├── tasks/
-    │   │   └── main.yml
-    │   └── templates/
-    │       ├── docker-compose.yml.j2
-    │       └── nginx.conf.j2
-    └── testing/              # Suite de pruebas unitarias e integración
-        └── tasks/
-            ├── main.yml      # Orquestador maestro de tests
-            ├── test_docker.yml # Prueba unitaria 1: Estado de los contenedores
-            ├── test_http.yml   # Prueba unitaria 2: Respuestas HTTP (200 OK)
-            └── test_db.yml     # Prueba unitaria 3: Salud de MySQL (ping)
+cloud-1/
+├── Makefile                     # Orquestador principal (GNU Make Standard)
+├── .gitignore                   # Exclusión estricta de credenciales y estados
+├── README.md                    # Documentación técnica del proyecto
+├── terraform/                   # Infraestructura como Código (IaC)
+│   ├── providers.tf             # Proveedores requeridos (AWS >= 5.0, Local >= 2.4)
+│   ├── variables.tf             # Parametrización (región, CIDRs, tipo instancia)
+│   ├── network.tf               # Topología VPC, Subnet, IGW y Route Tables
+│   ├── security.tf              # Security Group (puertos 22, 80 y 443)
+│   ├── compute.tf               # Clave SSH, AMI dinámica y máquina EC2
+│   ├── outputs.tf               # Salidas de terminal y renderizado de inventario
+│   └── templates/
+│       └── hosts.tpl            # Plantilla del inventario para Ansible
+└── ansible/                     # Gestión de Configuración
+    ├── ansible.cfg              # Configuración de conexiones y roles
+    ├── site.yml                 # Playbook principal
+    ├── inventory/
+    │   └── hosts.yml            # Inventario (autogenerado por Terraform)
+    ├── group_vars/
+    │   └── all/
+    │       └── vault.yml        # Secretos cifrados con Ansible Vault
+    └── roles/
+        ├── common/              # Actualización de SO y dependencias base
+        ├── docker/              # Instalación de Docker y Docker Compose
+        ├── app/                 # Despliegue de WordPress, MariaDB y Nginx
+        └── testing/             # Suite de verificación automatizada
 ```
 
 ---
 
-## 🚀 Requisitos Previos
+## ⚙️ Requisitos Previos
 
-En el **nodo de control** (tu máquina local):
-* Ansible `2.15+`
-* Python `3.10+`
-
-En los **nodes gestionados** (servidores remotos):
-* Ubuntu 22.04 LTS (o similar)
-* Acceso SSH con permisos de `sudo`
-* Python instalado (incluido por defecto en Ubuntu)
+* **Terraform** >= 1.5.0
+* **Ansible** >= 2.14
+* **AWS CLI** v2 (configurado con `aws configure`)
+* **GNU Make** >= 4.0
+* **OpenSSH Client** y clave generada en `~/.ssh/id_rsa`
 
 ---
 
-## ⚙️ Configuración
+## 🔐 Seguridad y Gestión de Secretos
 
-### 1. Inventario (`inventory.ini`)
-Define las direcciones IP o nombres de host de los servidores objetivo:
+* **Políticas de Repositorio:** El archivo `.gitignore` prohíbe el seguimiento de archivos `.tfstate`, variables locales `.tfvars`, claves privadas `.pem`/`id_rsa` e inventarios autogenerados.
+* **Cifrado de Variables:** Todas las contraseñas de base de datos y administradores de WordPress están cifradas en `ansible/group_vars/all/vault.yml` mediante **Ansible Vault (AES-256)**.
+* **Sin Credenciales en Código:** La autenticación de Terraform se realiza mediante variables de entorno del sistema o el perfil local de AWS CLI.
 
-```ini
-[webservers]
-server-test ansible_host=192.168.1.53 ansible_user=osg
-```
+---
 
-### 2. Variables Generales (`group_vars/all/vars.yml`)
-```yaml
-app_dir: "/opt/wordpress_app"
-db_name: "wordpress_db"
-db_user: "wp_user"
-domain_name: "192.168.1.53" # O "_" para aceptar cualquier cabecera Host
-```
+## 🚀 Ciclo de Vida y Despliegue
 
-### 3. Secretos Cifrados (`group_vars/all/vault.yml`)
-Las contraseñas se almacenan cifradas utilizando **Ansible Vault**:
+La gestión completa se realiza mediante el `Makefile` en la raíz del proyecto:
 
+### 1. Verificación y Calidad de Código
+Comprueba la validez sintáctica de Terraform y Ansible sin realizar llamadas a la nube:
 ```bash
-ansible-vault create group_vars/all/vault.yml
+make check
 ```
 
-Contenido cifrado:
-```yaml
-db_root_password: "TuPasswordSuperSeguroRoot"
-db_password: "TuPasswordSuperSeguroUsuario"
-```
-
----
-
-## 🛠️ Despliegue de la Infraestructura
-
-Para ejecutar el despliegue completo de extremo a extremo:
-
+### 2. Formateo de Código HCL
 ```bash
-ansible-playbook site.yml --ask-vault-pass
+make fmt
 ```
 
-Este comando ejecutará en secuencia:
-1. **Rol `common`**: Actualiza el sistema e instala paquetes básicos. Configura el firewall **UFW** permitiendo solo los puertos `22` (SSH), `80` (HTTP) y `443` (HTTPS).
-2. **Rol `docker`**: Instala Docker Engine, el plugin Docker Compose v2 y habilita el demonio para arranque automático.
-3. **Rol `app`**: Genera dinámicamente las plantillas `docker-compose.yml` y `nginx.conf`, levanta la pila de contenedores y configura los *handlers* de reinicio.
-4. **Rol `testing`**: Ejecuta las pruebas de verificación integradas.
-
----
-
-## 🧪 Pruebas Unitarias y de Integración
-
-El proyecto incluye un rol dedicado (`testing`) estructurado en pruebas unitarias modulares.
-
-### Ejecución de todas las pruebas
+### 3. Despliegue Completo
+Aprovisiona la infraestructura en AWS, genera el inventario y lanza el playbook de Ansible:
 ```bash
-ansible-playbook site.yml --tags test --ask-vault-pass
+make all
+```
+*(Nota: Se solicitará interactivamente la contraseña de Ansible Vault para descifrar los secretos).*
+
+### 4. Despliegue por Fases (Opcional)
+Si se desea ejecutar paso a paso:
+```bash
+make init     # Descarga proveedores de Terraform
+make plan     # Revisa los cambios previstos en AWS
+make apply    # Despliega la infraestructura y genera el inventario
+make deploy   # Ejecuta el aprovisionamiento de Ansible
 ```
 
-### Ejecución de pruebas unitarias específicas por etiqueta
+---
 
-* **Estado de Contenedores Docker**:
-  ```bash
-  ansible-playbook site.yml --tags test_docker --ask-vault-pass
-  ```
-* **Endpoints y Redirecciones HTTP**:
-  ```bash
-  ansible-playbook site.yml --tags test_http --ask-vault-pass
-  ```
-* **Salud de la Base de Datos MySQL**:
-  ```bash
-  ansible-playbook site.yml --tags test_db --ask-vault-pass
-  ```
+## 🧪 Pruebas y Verificación
+
+El rol `testing` de Ansible ejecuta comprobaciones automatizadas:
+* Verificación del estado de los contenedores Docker (`docker ps`).
+* Comprobación del puerto 80 (código HTTP 301/302 hacia HTTPS o respuesta correcta).
+* Comprobación del puerto 443 (servicio Nginx y certificado SSL activo).
+* Verificación de conectividad con WordPress.
+
+Para ejecutar exclusivamente las pruebas sobre una infraestructura ya desplegada:
+```bash
+make test
+```
 
 ---
 
-## 📋 Cumplimiento de Requisitos del Proyecto
+## 💰 Control de Costes (Free Tier)
 
-| Requisito | Estado | Implementación |
-| :--- | :---: | :--- |
-| **Reinicio Automático** | ✅ | Directiva `restart: unless-stopped` en Docker Compose y `systemctl enable docker`. |
-| **Persistencia de Datos** | ✅ | Volúmenes persistentes y *bind mounts* para MySQL y uploads de WordPress. |
-| **Despliegue Paralelo** | ✅ | Soportado nativamente por Ansible a través del inventario `[webservers]`. |
-| **1 Proceso = 1 Contenedor** | ✅ | 4 contenedores aislados: Nginx, WordPress, MySQL y phpMyAdmin. |
-| **Aislamiento de BD** | ✅ | MySQL expuesto solo en la red interna de Docker (`internal_net`), sin mapeo de puerto público. |
-| **Seguridad de Puertos** | ✅ | Firewall UFW configurado para permitir únicamente los puertos 22, 80 y 443. |
-| **Enrutamiento por URL** | ✅ | Nginx redirige `/` a WordPress y `/phpmyadmin/` a phpMyAdmin con `proxy_pass`. |
-| **Organización en Roles** | ✅ | Estructura modular dividida en `common`, `docker`, `app` y `testing`. |
-| **Gestión de Secretos** | ✅ | Contraseñas cifradas con **Ansible Vault** sin credenciales en código plano. |
-| **Idempotencia** | ✅ | Uso exclusivo de módulos declarativos nativos de Ansible. |
+Para evitar cargos imprevistos en la cuenta de AWS y cumplir con las directrices de entrega:
+* Instancia limitada a **`t2.micro`** (750 horas/mes gratuitas en Free Tier).
+* Disco de almacenamiento EBS de **20 GB** (límite gratuito de 30 GB).
+* Una sola IP elástica/pública asociada a la VPC.
 
----
-
-## 🌐 Verificación Manual en Navegador
-
-Una vez completado el despliegue, puedes acceder a los servicios desde tu navegador:
-
-* **Sitio Web WordPress**: `http://192.168.1.53/`
-* **Interfaz phpMyAdmin**: `http://192.168.1.53/phpmyadmin/`
+### Destrucción de Recursos
+Al finalizar las pruebas o la evaluación, ejecute:
+```bash
+make clean
+```
+Para realizar una limpieza exhaustiva (destrucción en AWS + borrado de archivos locales de estado e inventario):
+```bash
+make distclean
+```
