@@ -1,0 +1,21 @@
+# Terraform
+.terraform/
+*.tfstate
+*tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+*override.tf
+*override.tf.json
+*overrride.tf
+*override.tf.json
+
+#Ansible
+*.retry
+ansible/inventory/hosts.yml
+
+#secretos y claves
+*.pem
+*.key
+id_rsa

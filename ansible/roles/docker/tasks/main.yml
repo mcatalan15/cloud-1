@@ -1,0 +1,33 @@
+---
+# 1. Instalar dependencias para repositorios HTTPS
+- name: Instalar paquetes previos para Docker
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+    update_cache: true
+
+# 2. Instalar Docker Engine y docker Compose V2
+- name: Instalar Docker Engine y docker Compose V2
+  ansible.builtin.apt:
+    name:
+      - docker.io
+      - docker-compose-v2
+    state: present
+    update_cache: true
+
+# 3. Persistencia e inicio del servicio Docker (Systemd)
+- name: Asegurar que el servicio Docker esté inciado y habilitado en el arranque
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
+
+#4. Gestión de permisos para le usuario
+- name: Añadir el usuario {{ ansible_user }} al grupo docker
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: true

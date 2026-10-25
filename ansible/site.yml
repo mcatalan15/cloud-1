@@ -1,0 +1,15 @@
+--- 
+- name: Despliegue de infraestructura y servicios WordPress 
+  hosts: all
+  become: true
+  vars_files: 
+    - group_vars/all/vault.yml
+  roles: 
+    - role: common 
+      tags: ['deps', 'security'] 
+    - role: docker 
+      tags: ['deps', 'docker'] 
+    - role: app 
+      tags: ['deploy'] 
+    - role: testing 
+      tags: ['test']

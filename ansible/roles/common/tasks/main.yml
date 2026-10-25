@@ -1,0 +1,45 @@
+---
+# 1. Actualizar repositorios e instalar paquetes base
+- name: Actualizar cache de apt e instalar paquetes base
+  ansible.builtin.apt:
+    name:
+      - ufw
+      - curl
+      - git
+    state: present
+    update_cache: true
+
+# 2. Configurar políticas por defecto de UFW
+- name: Denegar todo el tráfico entrante por defecto de UFW
+  ansible.builtin.ufw:
+    policy: deny
+    direction: incoming
+
+- name: Permitir todo el tráfico saliente por defecto de UFW
+  ansible.builtin.ufw:
+    policy: allow
+    direction: outgoing
+
+# 3. Abrir únicamente los puertos requeridos (22, 80 y 443)
+- name: Permitir acceso SSH (puerto 22)
+  community.general.ufw:
+    rule: allow
+    port: 22
+    proto: tcp
+
+- name: Permitir acceso HTTP (puerto 80)
+  community.general.ufw:
+    rule: allow
+    port: 80
+    proto: tcp
+
+- name: Permitir acceso HTTPS (puerto 443)
+  community.general.ufw:
+    rule: allow
+    port: 443
+    proto: tcp
+
+# 4. Activar el servicio del cortafuegos
+- name: Asegurar que UFW está activiado y habilitado al reiniciar
+  community.general.ufw:
+    state: enabled

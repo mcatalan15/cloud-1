@@ -1,0 +1,11 @@
+# Archivo de inventario autogenerado por Terraform
+all:
+  hosts:
+    server-test:
+      ansible_host: ${server_ip}
+        ansible_user: ubuntu
+        ansible_ssh_private_key_file: ~/.ssh/id_rsa
+        ansible_become: true
+        ansible_become_method: sudo
+        ansible_become_user: root
+        ansible_python_interpreter: /usr/bin/python3

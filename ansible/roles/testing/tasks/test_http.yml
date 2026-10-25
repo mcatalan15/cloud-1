@@ -1,0 +1,13 @@
+---
+# Prueba unitaria 2: Verificas la respuesta web mediante peticiones HTTP
+- name: Comprobar la respuesta HTTP de la página principal de WP
+  ansible.builtin.uri:
+    url: "http://{{ domain_name }}/"
+    status_code: 200
+    return_content: false
+
+- name: Comprobar acceso a la interfaz de phpMyAdmin
+  ansible.builtin.uri:
+    url: "http://{{ domain_name }}/phpmyadmin/"
+    status_code: 200
+    return_content: false

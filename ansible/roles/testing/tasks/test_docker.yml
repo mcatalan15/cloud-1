@@ -1,0 +1,19 @@
+---
+# Prueba unitaria 1: Verificar el estado de los contenedores Docker
+- name: Obtener información del estado de los contenedores
+  community.docker.docker_container_info:
+    name: "{{ item }}"
+  register: container_status
+  loop:
+    - wp_db
+    - wp_app
+    - wp_phpmyadmin
+    - wp_nginx
+
+- name: Validar que todos los contenedores reportan estado running
+  ansible.builtin.assert:
+    that:
+      - item.container.State.Running == true
+    fail_msg: "El contenedor {{ item.item }} no está en estado running"
+    success_msg: "El contenedor {{ item.item }} está en estado running"
+  loop: "{{ container_status.results }}"
