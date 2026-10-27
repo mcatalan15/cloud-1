@@ -45,7 +45,7 @@ La solución está diseñada siguiendo el principio de **1 proceso = 1 contenedo
 El código está estructurado en **roles modulares** de Ansible para maximizar la mantenibilidad, reutilización e idempotencia:
 
 ```text
-cloud_1/
+ansible/
 ├── group_vars/
 │   └── all/
 │       ├── vars.yml          # Variables generales de configuración (rutas, dominio, BD)
