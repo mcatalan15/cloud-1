@@ -11,5 +11,3 @@
       tags: ['deps', 'docker'] 
     - role: app 
       tags: ['deploy'] 
-    - role: testing 
-      tags: ['test']

@@ -24,7 +24,7 @@ ANSIBLE_INV      := $(ANSIBLE_DIR)/inventory/hosts.yml
 WAIT_SSH_SECONDS ?= 20
 
 # 5. Targets que no generan un archivo con su mismo nombre
-.PHONY: all help init plan apply deploy check test clean distclean fmt
+.PHONY: all help init plan apply deploy check test clean distclean fmt aws-config
 
 # ==============================================================================
 # Metas de ayuda y documentación
@@ -38,13 +38,40 @@ help: ## Muestra este menú de ayuda documentado
 # Flujo principal de entrega (All / Build)
 # ==============================================================================
 
-all: apply deploy ## Despliega infraestructura completa en AWS y aprovisiona con Ansible
+all: init apply deploy ## Despliega infraestructura completa en AWS y aprovisiona con Ansible
+
+# ==============================================================================
+# Configuración Interactiva de Credenciales AWS && SSH
+# ==============================================================================
+
+ssh-key: ## Verifica si existe la clave SSH y la genera automáticamente si no existe
+	@if [ ! -f ~/.ssh/id_rsa.pub ]; then \
+		echo "=== Generando clave SSH local automáticamente ==="; \
+		mkdir -p ~/.ssh; \
+		ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -N ""; \
+		echo "¡Clave SSH generada exitosamente!"; \
+	else \
+		echo "=== Clave SSH ya existente detectada ==="; \
+	fi
+
+aws-config: ssh-key ## Solicita interactivamente las credenciales de AWS en la terminal y las configura
+	@echo "=== Configuración Interactiva de Credenciales AWS ==="
+	@read -p "Introduce tu AWS Access Key ID: " aws_access_key; \
+	read -s -p "Introduce tu AWS Secret Access Key: " aws_secret_key; \
+	echo ""; \
+	read -p "Introduce tu AWS Region por defecto (ej. us-east-1): " aws_region; \
+	\
+	aws configure set aws_access_key_id "$$aws_access_key"; \
+	aws configure set aws_secret_access_key "$$aws_secret_key"; \
+	aws configure set region "$$aws_region"; \
+	aws configure set output "json"; \
+	echo "¡Credenciales de AWS configuradas exitosamente!"
 
 # ==============================================================================
 # Gestión de Infraestructura (Terraform)
 # ==============================================================================
 
-init: ## Inicializa plugins y proveedores de Terraform
+init: aws-config ## Inicializa plugins y proveedores de Terraform
 	$(TERRAFORM) -chdir=$(TF_DIR) init
 
 plan: ## Genera y muestra el plan de ejecución de Terraform
