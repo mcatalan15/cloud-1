@@ -1,7 +1,7 @@
 # 1. Búsqueda dinámica de la AMI oficial más reciente de Ubuntu 22.04 LTS
 data "aws_ami" "ubuntu" {
   most_recent = true
-  owners      = ["099720109477"] # Canonical
+  owners      = ["099720109477"] # Canonical, garantiza autenticidad e integridad
 
   filter {
     name   = "name"
