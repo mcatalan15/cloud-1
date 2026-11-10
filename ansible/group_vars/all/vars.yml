@@ -1,4 +1,29 @@
 app_dir: "/opt/wordpress_app"
 db_name: "wordpress_db"
 db_user: "wp_user"
+
+# Dominio y Base de Datos
 domain_name: "{{ ansible_host }}"
+mysql_hostname: "mariadb" # o el nombre del contenedor de BD
+mysql_database: "oseivanedb"
+mysql_user: "oseivane"
+mysql_password: "{{ vault_mysql_password }}"
+mysql_root_user: "root"
+mysql_root_password: "{{ vault_mysql_root_password }}"
+
+# Configuración de WordPress
+wordpress_title: "oseivanePage"
+wordpress_admin: "oseivane_wordpress"
+wordpress_admin_pass: "{{ vault_wordpress_admin_pass }}"
+wordpress_admin_email: "oseivane@student.42barcelona.com"
+ 
+# Usuario secundario de WordPress
+wordpress_user: "oseivane"
+wordpress_email: "moscarseivanegarcia00@gmail.com"
+wordpress_user_pass: "{{ vault_wordpress_user_pass }}"
+
+# Rutas SSL y FTP
+certs_crt: "/etc/nginx/ssl/inception.crt"
+certs_key: "/etc/nginx/ssl/inception.key"
+ftp_user: "oseivane"
+ftp_password: "{{ vault_ftp_password }}"

@@ -23,8 +23,6 @@ ANSIBLE_SITE     := $(ANSIBLE_DIR)/site.yml
 ANSIBLE_INV      := $(ANSIBLE_DIR)/inventory/hosts.yml
 WAIT_SSH_SECONDS ?= 20
 
-# 5. Targets que no generan un archivo con su mismo nombre
-.PHONY: all help init plan apply deploy check test clean distclean fmt aws-config
 
 # ==============================================================================
 # Metas de ayuda y documentación
@@ -119,3 +117,6 @@ distclean: clean ## Limpieza total: destruye recursos y elimina archivos locales
 	rm -rf $(TF_DIR)/.terraform
 	rm -f $(TF_DIR)/.terraform.lock.hcl
 	rm -f $(TF_DIR)/*.tfstate $(TF_DIR)/*.tfstate.*
+
+# 5. Targets que no generan un archivo con su mismo nombre
+.PHONY: all help init plan apply deploy check test clean distclean fmt aws-config
